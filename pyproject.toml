@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "autoresearch-bench"
+version = "0.1.0"
+description = "Modular benchmark framework for LLM-driven automated research strategies"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "openai>=1.30.0",
+    "pyyaml>=6.0",
+    "autoresearch-problems @ git+https://github.com/vicruz99/autoresearch-problems.git",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.scripts]
+autoresearch-bench = "autoresearch_bench.__main__:main"

@@ -1,0 +1,74 @@
+# Experiment configuration for autoresearch_bench
+# Run with: python -m autoresearch_bench run --config configs/example.yaml
+
+# --------------------------------------------------------------------------
+# vLLM server settings
+# --------------------------------------------------------------------------
+vllm:
+  base_url: "http://localhost:8000/v1"
+  api_key: "dummy"
+  max_concurrency: 8   # max in-flight requests to vLLM at once
+  max_retries: 3       # retries on transient failures (exponential back-off)
+
+# --------------------------------------------------------------------------
+# Models to evaluate — add any model name served by your vLLM instance
+# --------------------------------------------------------------------------
+models:
+  - name: "gpt-oss-120b"
+  - name: "Qwen/Qwen3.5-32B"
+
+# --------------------------------------------------------------------------
+# Problems — use "all" to run every registered problem, or list specific IDs
+# --------------------------------------------------------------------------
+problems:
+  - "combinatorics/cap_set"
+  # - "combinatorics/online_bin_packing"
+  # - "geometry/circle_packing"
+  # - "analysis/kissing_number"
+  # Uncomment the line below to run all problems:
+  # - "all"
+
+# --------------------------------------------------------------------------
+# Sampler strategies
+# --------------------------------------------------------------------------
+samplers:
+  # Random sampler: N independent LLM calls from the initial program
+  - type: "random"
+    num_samples: 50
+    mode: "full_rewrite"   # "full_rewrite" | "edit"
+
+  # Iterative sampler: sequential refinement — each step feeds back the best
+  - type: "iterative"
+    num_steps: 10
+    samples_per_step: 5
+    mode: "full_rewrite"
+
+  # Uncomment to also test edit mode
+  # - type: "random"
+  #   num_samples: 50
+  #   mode: "edit"
+
+# --------------------------------------------------------------------------
+# Reproducibility: run each (sampler, model, problem) combination once per seed
+# --------------------------------------------------------------------------
+runs:
+  seeds: [42, 123, 456]
+
+# --------------------------------------------------------------------------
+# LLM generation hyper-parameters
+# --------------------------------------------------------------------------
+llm_params:
+  temperature: 0.8
+  max_tokens: 4096
+  top_p: 0.95
+
+# --------------------------------------------------------------------------
+# Evaluation settings
+# --------------------------------------------------------------------------
+evaluation:
+  max_workers: 8   # parallel workers for execute_and_evaluate_batch
+
+# --------------------------------------------------------------------------
+# Output directory for JSON result files
+# --------------------------------------------------------------------------
+output_dir: "experiments/results"
