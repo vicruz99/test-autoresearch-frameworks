@@ -7,21 +7,22 @@
 vllm:
   base_url: "http://localhost:8000/v1"
   api_key: "dummy"
-  max_concurrency: 8   # max in-flight requests to vLLM at once
+  max_concurrency: 32   # max in-flight requests to vLLM at once
   max_retries: 3       # retries on transient failures (exponential back-off)
 
 # --------------------------------------------------------------------------
 # Models to evaluate — add any model name served by your vLLM instance
 # --------------------------------------------------------------------------
 models:
-  - name: "gpt-oss-120b"
-  - name: "Qwen/Qwen3.5-32B"
+  - name: "openai/gpt-oss-120b"
+  #- name: "Qwen/Qwen3.5-32B"
 
 # --------------------------------------------------------------------------
 # Problems — use "all" to run every registered problem, or list specific IDs
 # --------------------------------------------------------------------------
 problems:
-  - "combinatorics/cap_set"
+  #- "combinatorics/cap_set"
+  - "analysis/first_autocorrelation_inequality"
   # - "combinatorics/online_bin_packing"
   # - "geometry/circle_packing"
   # - "analysis/kissing_number"
@@ -34,14 +35,14 @@ problems:
 samplers:
   # Random sampler: N independent LLM calls from the initial program
   - type: "random"
-    num_samples: 50
+    num_samples: 15
     mode: "full_rewrite"   # "full_rewrite" | "edit"
 
-  # Iterative sampler: sequential refinement — each step feeds back the best
-  - type: "iterative"
-    num_steps: 10
-    samples_per_step: 5
-    mode: "full_rewrite"
+  # # Iterative sampler: sequential refinement — each step feeds back the best
+  # - type: "iterative"
+  #   num_steps: 5
+  #   samples_per_step: 2
+  #   mode: "full_rewrite"
 
   # Uncomment to also test edit mode
   # - type: "random"
@@ -52,7 +53,7 @@ samplers:
 # Reproducibility: run each (sampler, model, problem) combination once per seed
 # --------------------------------------------------------------------------
 runs:
-  seeds: [42, 123, 456]
+  seeds: [42]
 
 # --------------------------------------------------------------------------
 # LLM generation hyper-parameters
