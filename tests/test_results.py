@@ -67,6 +67,7 @@ class TestStepResult:
         expected_keys = {
             "step", "prompt_messages", "raw_response", "generated_code",
             "score", "valid", "error", "execution_time", "metrics",
+            "reasoning_content",
         }
         assert expected_keys == set(d.keys())
 
@@ -170,6 +171,46 @@ class TestRunResult:
         fname = path.name
         assert "iterative" in fname
         assert "123" in fname
+
+    def test_save_creates_programs_folder(self, tmp_path):
+        """save() creates a per-experiment folder alongside the JSON file."""
+        rr = make_run_result()
+        path = rr.save(tmp_path)
+        stem = path.stem
+        programs_dir = tmp_path / stem
+        assert programs_dir.is_dir()
+
+    def test_save_writes_individual_program_files(self, tmp_path):
+        """save() writes each step's generated_code as a separate .py file."""
+        rr = make_run_result()
+        path = rr.save(tmp_path)
+        stem = path.stem
+        programs_dir = tmp_path / stem
+        py_files = list(programs_dir.glob("program_*.py"))
+        # make_run_result() has one step with generated_code set
+        assert len(py_files) == 1
+        assert py_files[0].read_text() == rr.steps[0].generated_code
+
+    def test_save_skips_empty_generated_code(self, tmp_path):
+        """save() does not write a .py file for steps with empty generated_code."""
+        from autoresearch_bench.results import StepResult
+        rr = make_run_result()
+        # Replace generated_code with an empty string
+        rr.steps[0] = StepResult(
+            step=0,
+            prompt_messages=[],
+            raw_response="",
+            generated_code="",
+            score=None,
+            valid=False,
+            error="no code",
+            execution_time=0.0,
+        )
+        path = rr.save(tmp_path)
+        stem = path.stem
+        programs_dir = tmp_path / stem
+        py_files = list(programs_dir.glob("program_*.py"))
+        assert len(py_files) == 0
 
 
 # ---------------------------------------------------------------------------

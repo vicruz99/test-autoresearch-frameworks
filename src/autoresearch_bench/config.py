@@ -64,6 +64,7 @@ class LLMParams:
     temperature: float = 0.8
     max_tokens: int = 4096
     top_p: float = 0.95
+    reasoning_effort: str | None = None
 
 
 @dataclasses.dataclass
@@ -142,6 +143,7 @@ class ExperimentConfig:
             temperature=float(llm_raw.get("temperature", 0.8)),
             max_tokens=int(llm_raw.get("max_tokens", 4096)),
             top_p=float(llm_raw.get("top_p", 0.95)),
+            reasoning_effort=llm_raw.get("reasoning_effort", None) or None,
         )
 
         eval_raw = d.get("evaluation", {})

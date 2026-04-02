@@ -30,6 +30,7 @@ class StepResult:
         step: Step index (0-based).
         prompt_messages: The messages sent to the LLM.
         raw_response: Raw text returned by the LLM.
+        reasoning_content: Reasoning/thinking tokens returned by the LLM, if any.
         generated_code: Extracted / applied code.
         score: Evaluation score (``None`` if evaluation failed).
         valid: Whether the evaluation was valid.
@@ -47,6 +48,7 @@ class StepResult:
     error: str
     execution_time: float
     metrics: dict[str, Any] = dataclasses.field(default_factory=dict)
+    reasoning_content: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Serialise to a plain dict."""
@@ -116,7 +118,18 @@ class RunResult:
         }
 
     def save(self, output_dir: str | Path) -> Path:
-        """Persist this run result as a JSON file.
+        """Persist this run result as a JSON file and save generated programs.
+
+        In addition to the JSON result file, a per-experiment folder is created
+        containing each step's generated code as a separate ``.py`` file.  The
+        folder structure is::
+
+            output_dir/
+                experiment_name/
+                    program_0000.py
+                    program_0001.py
+                    ...
+                result_<experiment_name>.json
 
         Parameters
         ----------
@@ -126,18 +139,30 @@ class RunResult:
         Returns
         -------
         Path
-            The path of the written file.
+            The path of the written JSON file.
         """
         out = Path(output_dir)
         out.mkdir(parents=True, exist_ok=True)
-        # Build a safe filename from the key dimensions
+        # Build a safe filename stem from the key dimensions
         safe_model = self.model.replace("/", "_").replace(" ", "_")
         safe_problem = self.problem.replace("/", "_")
-        fname = f"{self.sampler_type}_{self.sampler_mode}_{safe_model}_{safe_problem}_seed{self.seed}_{self.timestamp.replace(':', '-')}.json"
-        fpath = out / fname
+        stem = f"{self.sampler_type}_{self.sampler_mode}_{safe_model}_{safe_problem}_seed{self.seed}_{self.timestamp.replace(':', '-')}"
+
+        # Save individual program files in a per-experiment sub-folder
+        programs_dir = out / stem
+        programs_dir.mkdir(parents=True, exist_ok=True)
+        for step in self.steps:
+            if step.generated_code:
+                prog_path = programs_dir / f"program_{step.step:04d}.py"
+                with open(prog_path, "w") as fh:
+                    fh.write(step.generated_code)
+
+        # Save the JSON result file
+        fpath = out / f"{stem}.json"
         with open(fpath, "w") as fh:
             json.dump(self.to_dict(), fh, indent=2)
         logger.info("Saved result → %s", fpath)
+        logger.info("Saved programs → %s/", programs_dir)
         return fpath
 
 

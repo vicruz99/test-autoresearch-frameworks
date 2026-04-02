@@ -49,7 +49,7 @@ class TestIterativeSamplerRun:
     async def test_returns_run_result(self, sample_spec, mock_llm_client):
         """run() returns a RunResult instance."""
         code_block = "```python\ndef solve(n): return [[0]*n]\n```"
-        mock_llm_client.batch_complete = AsyncMock(return_value=[code_block, code_block])
+        mock_llm_client.batch_complete = AsyncMock(return_value=[(code_block, None), (code_block, None)])
         eval_results = [_make_eval_result(10.0), _make_eval_result(20.0)]
 
         sampler = _make_sampler(mock_llm_client, num_steps=1, samples_per_step=2)
@@ -65,7 +65,7 @@ class TestIterativeSamplerRun:
         """Total steps = num_steps * samples_per_step."""
         code_block = "```python\ndef solve(n): return []\n```"
         num_steps, sps = 3, 2
-        mock_llm_client.batch_complete = AsyncMock(return_value=[code_block] * sps)
+        mock_llm_client.batch_complete = AsyncMock(return_value=[(code_block, None)] * sps)
         eval_per_step = [_make_eval_result(float(i)) for i in range(sps)]
 
         sampler = _make_sampler(mock_llm_client, num_steps=num_steps, samples_per_step=sps)
@@ -92,8 +92,8 @@ class TestIterativeSamplerRun:
             nonlocal call_count
             call_count += 1
             if call_count == 1:
-                return [better_code]
-            return [worse_code]
+                return [(better_code, None)]
+            return [(worse_code, None)]
 
         mock_llm_client.batch_complete = side_effect_batch
         step1_eval = [_make_eval_result(100.0)]
@@ -122,7 +122,7 @@ class TestIterativeSamplerRun:
         """best_score in the RunResult never decreases between steps."""
         code_block = "```python\ndef solve(n): return []\n```"
         # Step 1 yields 100, step 2 yields 10 (should not replace best)
-        mock_llm_client.batch_complete = AsyncMock(return_value=[code_block])
+        mock_llm_client.batch_complete = AsyncMock(return_value=[(code_block, None)])
         eval_call_count = 0
 
         def side_effect_eval_batch(spec, codes, **kwargs):
@@ -155,7 +155,7 @@ class TestIterativeSamplerRun:
 
     async def test_handles_all_none_codes_gracefully(self, sample_spec, mock_llm_client):
         """run() handles steps where all LLM responses contain no code block."""
-        mock_llm_client.batch_complete = AsyncMock(return_value=["no code here", "also no code"])
+        mock_llm_client.batch_complete = AsyncMock(return_value=[("no code here", None), ("also no code", None)])
 
         sampler = _make_sampler(mock_llm_client, num_steps=1, samples_per_step=2)
         with (
@@ -171,7 +171,7 @@ class TestIterativeSamplerRun:
     async def test_minimize_problem_updates_on_lower_score(self, sample_spec_minimize, mock_llm_client):
         """For minimize problems, best_score decreases over steps."""
         code_block = "```python\ndef solve(): return 0.1\n```"
-        mock_llm_client.batch_complete = AsyncMock(return_value=[code_block])
+        mock_llm_client.batch_complete = AsyncMock(return_value=[(code_block, None)])
         eval_call_count = 0
 
         def side_effect_eval_batch(spec, codes, **kwargs):

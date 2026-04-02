@@ -54,10 +54,11 @@ class TestBackoff:
 # Helpers to build mock openai responses
 # ---------------------------------------------------------------------------
 
-def _make_completion_response(content: str) -> MagicMock:
+def _make_completion_response(content: str, reasoning_content: str | None = None) -> MagicMock:
     """Create a MagicMock that looks like an openai ChatCompletion response."""
     mock_choice = MagicMock()
     mock_choice.message.content = content
+    mock_choice.message.reasoning_content = reasoning_content
     mock_response = MagicMock()
     mock_response.choices = [mock_choice]
     return mock_response
@@ -83,7 +84,7 @@ class TestLLMClientComplete:
     """Tests for LLMClient.complete()."""
 
     async def test_complete_returns_content_string(self):
-        """complete() returns the content string from the LLM response."""
+        """complete() returns a (content, reasoning_content) tuple."""
         mock_response = _make_completion_response("Hello from LLM")
         with patch("openai.AsyncOpenAI") as MockOpenAI:
             mock_oai = MagicMock()
@@ -91,8 +92,9 @@ class TestLLMClientComplete:
             MockOpenAI.return_value = mock_oai
 
             client = LLMClient(base_url="http://localhost:8000/v1", api_key="dummy")
-            result = await client.complete("gpt-oss-120b", [{"role": "user", "content": "hi"}])
-            assert result == "Hello from LLM"
+            content, reasoning_content = await client.complete("gpt-oss-120b", [{"role": "user", "content": "hi"}])
+            assert content == "Hello from LLM"
+            assert reasoning_content is None
 
     async def test_complete_retries_on_rate_limit(self):
         """complete() retries when a RateLimitError is raised."""
@@ -112,8 +114,8 @@ class TestLLMClientComplete:
                     api_key="dummy",
                     max_retries=2,
                 )
-                result = await client.complete("gpt-oss-120b", [{"role": "user", "content": "hi"}])
-                assert result == "ok after retry"
+                content, _ = await client.complete("gpt-oss-120b", [{"role": "user", "content": "hi"}])
+                assert content == "ok after retry"
 
     async def test_complete_raises_after_all_retries_exhausted(self):
         """complete() raises RuntimeError when all retry attempts fail."""
@@ -145,8 +147,22 @@ class TestLLMClientComplete:
             MockOpenAI.return_value = mock_oai
 
             client = LLMClient(base_url="http://localhost:8000/v1", api_key="dummy")
-            result = await client.complete("gpt-oss-120b", [{"role": "user", "content": "hi"}])
-            assert result == ""
+            content, _ = await client.complete("gpt-oss-120b", [{"role": "user", "content": "hi"}])
+            assert content == ""
+
+    async def test_complete_captures_reasoning_content(self):
+        """complete() returns reasoning_content from the message when present."""
+        mock_response = _make_completion_response("answer", reasoning_content="step-by-step reasoning")
+
+        with patch("openai.AsyncOpenAI") as MockOpenAI:
+            mock_oai = MagicMock()
+            mock_oai.chat.completions.create = AsyncMock(return_value=mock_response)
+            MockOpenAI.return_value = mock_oai
+
+            client = LLMClient(base_url="http://localhost:8000/v1", api_key="dummy")
+            content, reasoning_content = await client.complete("gpt-oss-120b", [{"role": "user", "content": "hi"}])
+            assert content == "answer"
+            assert reasoning_content == "step-by-step reasoning"
 
 
 # ---------------------------------------------------------------------------
@@ -158,7 +174,7 @@ class TestLLMClientBatchComplete:
     """Tests for LLMClient.batch_complete()."""
 
     async def test_batch_complete_returns_list_in_order(self):
-        """batch_complete() returns results in the same order as inputs."""
+        """batch_complete() returns (content, reasoning_content) tuples in the same order as inputs."""
         responses = [
             _make_completion_response("response_0"),
             _make_completion_response("response_1"),
@@ -175,9 +191,12 @@ class TestLLMClientBatchComplete:
             results = await client.batch_complete("gpt-oss-120b", messages_list)
 
             assert len(results) == 3
-            assert results[0] == "response_0"
-            assert results[1] == "response_1"
-            assert results[2] == "response_2"
+            content0, _ = results[0]
+            content1, _ = results[1]
+            content2, _ = results[2]
+            assert content0 == "response_0"
+            assert content1 == "response_1"
+            assert content2 == "response_2"
 
     async def test_batch_complete_captures_exceptions(self):
         """batch_complete() returns exceptions as values, not raised."""

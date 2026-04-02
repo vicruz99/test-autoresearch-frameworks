@@ -80,9 +80,9 @@ def bad_eval_result() -> EvalResult:
 def mock_llm_client() -> MagicMock:
     """A MagicMock standing in for LLMClient with AsyncMock methods."""
     client = MagicMock(spec=LLMClient)
-    client.complete = AsyncMock(return_value="```python\ndef solve(n):\n    return [[0]*n]\n```")
+    client.complete = AsyncMock(return_value=("```python\ndef solve(n):\n    return [[0]*n]\n```", None))
     client.batch_complete = AsyncMock(
-        return_value=["```python\ndef solve(n):\n    return [[0]*n]\n```"]
+        return_value=[("```python\ndef solve(n):\n    return [[0]*n]\n```", None)]
     )
     return client
 

@@ -93,7 +93,7 @@ class BaseSampler(abc.ABC):
         spec: ProblemSpec,
         current_program: str,
         n: int,
-    ) -> list[tuple[list[dict[str, str]], str, str | None]]:
+    ) -> list[tuple[list[dict[str, str]], str, str | None, str | None]]:
         """Ask the LLM to generate *n* improved candidates.
 
         Parameters
@@ -107,9 +107,10 @@ class BaseSampler(abc.ABC):
 
         Returns
         -------
-        list of (messages, raw_response, extracted_code)
-            Each element corresponds to one LLM call.  ``extracted_code``
-            is ``None`` when no code block could be extracted.
+        list of (messages, raw_response, reasoning_content, extracted_code)
+            Each element corresponds to one LLM call.  ``reasoning_content``
+            is ``None`` when the model does not emit reasoning tokens.
+            ``extracted_code`` is ``None`` when no code block could be extracted.
         """
         messages = self.prompt_builder.build(spec, current_program)
         messages_list = [messages] * n
@@ -121,15 +122,16 @@ class BaseSampler(abc.ABC):
         )
 
         results = []
-        for raw in raw_responses:
-            if isinstance(raw, Exception):
-                logger.warning("LLM call failed: %s", raw)
-                results.append((messages, "", None))
+        for raw_result in raw_responses:
+            if isinstance(raw_result, Exception):
+                logger.warning("LLM call failed: %s", raw_result)
+                results.append((messages, "", None, None))
                 continue
+            raw, reasoning_content = raw_result
             code = extract_code(raw, mode=self.prompt_builder.mode)
             if code is not None and self.prompt_builder.mode == "edit":
                 code = apply_edit(current_program, code)
-            results.append((messages, raw, code))
+            results.append((messages, raw, reasoning_content, code))
         return results
 
     def _evaluate_candidates(

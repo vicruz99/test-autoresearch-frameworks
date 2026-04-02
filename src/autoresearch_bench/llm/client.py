@@ -65,7 +65,7 @@ class LLMClient:
         max_tokens: int = 4096,
         top_p: float = 0.95,
         **kwargs: Any,
-    ) -> str:
+    ) -> tuple[str, str | None]:
         """Send a single chat completion request and return the response text.
 
         Retries on transient failures with exponential back-off and jitter.
@@ -87,8 +87,9 @@ class LLMClient:
 
         Returns
         -------
-        str
-            The assistant message content.
+        tuple[str, str | None]
+            A ``(content, reasoning_content)`` pair.  ``reasoning_content`` is
+            ``None`` when the model does not produce reasoning tokens.
 
         Raises
         ------
@@ -107,8 +108,10 @@ class LLMClient:
                         top_p=top_p,
                         **kwargs,
                     )
-                    content = response.choices[0].message.content or ""
-                    return content
+                    message = response.choices[0].message
+                    content = message.content or ""
+                    reasoning_content: str | None = getattr(message, "reasoning_content", None)
+                    return content, reasoning_content
                 except openai.RateLimitError as exc:
                     last_exc = exc
                     wait = _backoff(attempt)
@@ -141,11 +144,11 @@ class LLMClient:
         max_tokens: int = 4096,
         top_p: float = 0.95,
         **kwargs: Any,
-    ) -> list[str | Exception]:
+    ) -> list[tuple[str, str | None] | Exception]:
         """Send many completion requests concurrently and return results in order.
 
         Results corresponding to failed requests contain the :class:`Exception`
-        rather than a string — callers should check with ``isinstance(r, Exception)``.
+        rather than a tuple — callers should check with ``isinstance(r, Exception)``.
 
         Parameters
         ----------
@@ -160,8 +163,10 @@ class LLMClient:
 
         Returns
         -------
-        list[str | Exception]
-            Results in the same order as ``messages_list``.
+        list[tuple[str, str | None] | Exception]
+            Results in the same order as ``messages_list``.  Each successful
+            entry is a ``(content, reasoning_content)`` tuple; failed entries
+            are :class:`Exception` instances.
         """
         tasks = [
             self.complete(model, msgs, temperature=temperature, max_tokens=max_tokens, top_p=top_p, **kwargs)
