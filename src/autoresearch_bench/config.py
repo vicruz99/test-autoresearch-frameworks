@@ -59,11 +59,21 @@ class RunsConfig:
 
 @dataclasses.dataclass
 class LLMParams:
-    """Generation hyper-parameters forwarded to every LLM call."""
+    """Generation hyper-parameters forwarded to every LLM call.
+
+    Attributes:
+        temperature: Sampling temperature.
+        max_tokens: Maximum tokens to generate.
+        top_p: Top-p nucleus sampling parameter.
+        reasoning_effort: Optional reasoning effort level (e.g. ``"low"``,
+            ``"medium"``, ``"high"``).  Passed to vLLM via ``extra_body``.
+            ``None`` means the parameter is omitted entirely.
+    """
 
     temperature: float = 0.8
     max_tokens: int = 4096
     top_p: float = 0.95
+    reasoning_effort: str | None = None
 
 
 @dataclasses.dataclass
@@ -138,10 +148,12 @@ class ExperimentConfig:
         runs = RunsConfig(seeds=runs_raw.get("seeds", [42]))
 
         llm_raw = d.get("llm_params", {})
+        reasoning_effort_raw = llm_raw.get("reasoning_effort", None)
         llm_params = LLMParams(
             temperature=float(llm_raw.get("temperature", 0.8)),
             max_tokens=int(llm_raw.get("max_tokens", 4096)),
             top_p=float(llm_raw.get("top_p", 0.95)),
+            reasoning_effort=str(reasoning_effort_raw) if reasoning_effort_raw is not None else None,
         )
 
         eval_raw = d.get("evaluation", {})

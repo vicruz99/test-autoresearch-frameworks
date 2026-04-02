@@ -75,8 +75,8 @@ class RandomSampler(BaseSampler):
         candidates = await self._generate_candidates(spec, spec.initial_program, self.num_samples)
 
         # Separate valid code strings, keeping track of indices
-        codes = [c for _, _, c in candidates if c is not None]
-        none_mask = [c is None for _, _, c in candidates]
+        codes = [c for _, _, c, _ in candidates if c is not None]
+        none_mask = [c is None for _, _, c, _ in candidates]
 
         steps: list[StepResult] = []
 
@@ -89,7 +89,7 @@ class RandomSampler(BaseSampler):
         eval_iter = iter(eval_results)
         all_candidates: list[tuple[float | None, str]] = []
 
-        for idx, (messages, raw, code) in enumerate(candidates):
+        for idx, (messages, raw, code, completion) in enumerate(candidates):
             if code is None:
                 step = StepResult(
                     step=idx,
@@ -100,6 +100,11 @@ class RandomSampler(BaseSampler):
                     valid=False,
                     error="No code extracted from LLM response",
                     execution_time=0.0,
+                    reasoning_content=completion.reasoning_content if completion else "",
+                    prompt_tokens=completion.prompt_tokens if completion else None,
+                    reasoning_tokens=completion.reasoning_tokens if completion else None,
+                    completion_tokens=completion.completion_tokens if completion else None,
+                    total_tokens=completion.total_tokens if completion else None,
                 )
                 all_candidates.append((None, spec.initial_program))
             else:
@@ -115,6 +120,11 @@ class RandomSampler(BaseSampler):
                     error=er.error,
                     execution_time=er.execution_time,
                     metrics=er.metrics,
+                    reasoning_content=completion.reasoning_content if completion else "",
+                    prompt_tokens=completion.prompt_tokens if completion else None,
+                    reasoning_tokens=completion.reasoning_tokens if completion else None,
+                    completion_tokens=completion.completion_tokens if completion else None,
+                    total_tokens=completion.total_tokens if completion else None,
                 )
                 all_candidates.append((score, code))
             steps.append(step)
@@ -132,4 +142,5 @@ class RandomSampler(BaseSampler):
             best_code=best_code,
             initial_score=initial_score,
             config_dict=config_dict,
+            initial_program=spec.initial_program,
         )

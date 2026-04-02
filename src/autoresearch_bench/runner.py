@@ -96,11 +96,13 @@ class Runner:
                     len(problems), len(self.config.models), len(self.config.samplers), len(self.config.runs.seeds))
 
         config_dict = _config_to_dict(self.config)
-        llm_params = {
+        llm_params: dict[str, Any] = {
             "temperature": self.config.llm_params.temperature,
             "max_tokens": self.config.llm_params.max_tokens,
             "top_p": self.config.llm_params.top_p,
         }
+        if self.config.llm_params.reasoning_effort is not None:
+            llm_params["reasoning_effort"] = self.config.llm_params.reasoning_effort
 
         all_results: list[RunResult] = []
 

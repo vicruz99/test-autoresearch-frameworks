@@ -20,7 +20,7 @@ from typing import Any
 from autoresearch_problems import ProblemSpec, execute_and_evaluate_batch, EvalResult
 
 from autoresearch_bench.code_utils import extract_code, apply_edit
-from autoresearch_bench.llm.client import LLMClient
+from autoresearch_bench.llm.client import LLMClient, CompletionResult
 from autoresearch_bench.prompts.builder import PromptBuilder
 from autoresearch_bench.results import RunResult, StepResult
 
@@ -93,7 +93,7 @@ class BaseSampler(abc.ABC):
         spec: ProblemSpec,
         current_program: str,
         n: int,
-    ) -> list[tuple[list[dict[str, str]], str, str | None]]:
+    ) -> list[tuple[list[dict[str, str]], str, str | None, CompletionResult | None]]:
         """Ask the LLM to generate *n* improved candidates.
 
         Parameters
@@ -107,9 +107,10 @@ class BaseSampler(abc.ABC):
 
         Returns
         -------
-        list of (messages, raw_response, extracted_code)
+        list of (messages, raw_response, extracted_code, completion_result)
             Each element corresponds to one LLM call.  ``extracted_code``
             is ``None`` when no code block could be extracted.
+            ``completion_result`` is ``None`` when the LLM call failed.
         """
         messages = self.prompt_builder.build(spec, current_program)
         messages_list = [messages] * n
@@ -124,12 +125,12 @@ class BaseSampler(abc.ABC):
         for raw in raw_responses:
             if isinstance(raw, Exception):
                 logger.warning("LLM call failed: %s", raw)
-                results.append((messages, "", None))
+                results.append((messages, "", None, None))
                 continue
-            code = extract_code(raw, mode=self.prompt_builder.mode)
+            code = extract_code(raw.content, mode=self.prompt_builder.mode)
             if code is not None and self.prompt_builder.mode == "edit":
                 code = apply_edit(current_program, code)
-            results.append((messages, raw, code))
+            results.append((messages, raw.content, code, raw))
         return results
 
     def _evaluate_candidates(

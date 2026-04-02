@@ -93,7 +93,7 @@ class IterativeSampler(BaseSampler):
             # Generate samples_per_step candidates from the current best program
             candidates = await self._generate_candidates(spec, current_program, self.samples_per_step)
 
-            codes = [c for _, _, c in candidates if c is not None]
+            codes = [c for _, _, c, _ in candidates if c is not None]
 
             if codes:
                 eval_results = self._evaluate_candidates(spec, codes)
@@ -103,7 +103,7 @@ class IterativeSampler(BaseSampler):
             eval_iter = iter(eval_results)
             step_candidates: list[tuple[float | None, str]] = []
 
-            for _, (messages, raw, code) in enumerate(candidates):
+            for _, (messages, raw, code, completion) in enumerate(candidates):
                 if code is None:
                     step = StepResult(
                         step=global_step,
@@ -114,6 +114,11 @@ class IterativeSampler(BaseSampler):
                         valid=False,
                         error="No code extracted from LLM response",
                         execution_time=0.0,
+                        reasoning_content=completion.reasoning_content if completion else "",
+                        prompt_tokens=completion.prompt_tokens if completion else None,
+                        reasoning_tokens=completion.reasoning_tokens if completion else None,
+                        completion_tokens=completion.completion_tokens if completion else None,
+                        total_tokens=completion.total_tokens if completion else None,
                     )
                     step_candidates.append((None, current_program))
                 else:
@@ -129,6 +134,11 @@ class IterativeSampler(BaseSampler):
                         error=er.error,
                         execution_time=er.execution_time,
                         metrics=er.metrics,
+                        reasoning_content=completion.reasoning_content if completion else "",
+                        prompt_tokens=completion.prompt_tokens if completion else None,
+                        reasoning_tokens=completion.reasoning_tokens if completion else None,
+                        completion_tokens=completion.completion_tokens if completion else None,
+                        total_tokens=completion.total_tokens if completion else None,
                     )
                     step_candidates.append((score, code))
                 all_steps.append(step)
@@ -158,4 +168,5 @@ class IterativeSampler(BaseSampler):
             best_code=current_program,
             initial_score=initial_score,
             config_dict=config_dict,
+            initial_program=spec.initial_program,
         )

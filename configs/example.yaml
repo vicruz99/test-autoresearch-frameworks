@@ -62,6 +62,7 @@ llm_params:
   temperature: 0.8
   max_tokens: 4096
   top_p: 0.95
+  # reasoning_effort: "medium"  # Optional: "low", "medium", or "high" — only for reasoning models
 
 # --------------------------------------------------------------------------
 # Evaluation settings

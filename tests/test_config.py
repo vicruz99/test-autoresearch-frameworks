@@ -98,6 +98,7 @@ class TestExperimentConfigFromDict:
         assert cfg.llm_params.temperature == pytest.approx(0.7)
         assert cfg.llm_params.max_tokens == 2048
         assert cfg.llm_params.top_p == pytest.approx(0.9)
+        assert cfg.llm_params.reasoning_effort is None
 
     def test_evaluation_config_populated(self):
         """EvaluationConfig is parsed correctly."""
@@ -128,6 +129,7 @@ class TestExperimentConfigDefaults:
         assert cfg.llm_params.temperature == pytest.approx(0.8)
         assert cfg.llm_params.max_tokens == 4096
         assert cfg.llm_params.top_p == pytest.approx(0.95)
+        assert cfg.llm_params.reasoning_effort is None
         assert cfg.evaluation.max_workers == 8
         assert cfg.output_dir == "experiments/results"
 
@@ -147,6 +149,18 @@ class TestExperimentConfigDefaults:
         cfg = ExperimentConfig._from_dict(d)
         assert cfg.vllm.api_key == "my-key"
         assert cfg.vllm.base_url == "http://localhost:8000/v1"
+
+    def test_reasoning_effort_parsed_when_set(self):
+        """reasoning_effort is parsed from llm_params when provided."""
+        d = {"llm_params": {"reasoning_effort": "medium"}}
+        cfg = ExperimentConfig._from_dict(d)
+        assert cfg.llm_params.reasoning_effort == "medium"
+
+    def test_reasoning_effort_none_when_absent(self):
+        """reasoning_effort defaults to None when not in YAML."""
+        d = {"llm_params": {"temperature": 0.5}}
+        cfg = ExperimentConfig._from_dict(d)
+        assert cfg.llm_params.reasoning_effort is None
 
 
 class TestExperimentConfigFromYaml:

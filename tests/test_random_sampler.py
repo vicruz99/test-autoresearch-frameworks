@@ -7,10 +7,19 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from autoresearch_problems import EvalResult
 
-from autoresearch_bench.llm.client import LLMClient
+from autoresearch_bench.llm.client import LLMClient, CompletionResult
 from autoresearch_bench.prompts.builder import PromptBuilder
 from autoresearch_bench.results import RunResult
 from autoresearch_bench.samplers.random_sampler import RandomSampler
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _cr(content: str) -> CompletionResult:
+    """Shorthand to create a CompletionResult."""
+    return CompletionResult(content=content)
 
 
 # ---------------------------------------------------------------------------
@@ -48,7 +57,7 @@ class TestRandomSamplerRun:
     async def test_returns_run_result(self, sample_spec, mock_llm_client):
         """run() returns a RunResult instance."""
         mock_llm_client.batch_complete = AsyncMock(
-            return_value=["```python\ndef solve(n): return [[0]*n]\n```"] * 3
+            return_value=[_cr("```python\ndef solve(n): return [[0]*n]\n```")] * 3
         )
         eval_results = [_make_eval_result(10.0), _make_eval_result(20.0), _make_eval_result(15.0)]
 
@@ -64,7 +73,7 @@ class TestRandomSamplerRun:
     async def test_best_score_is_maximum_for_maximize_problem(self, sample_spec, mock_llm_client):
         """best_score equals the highest valid score when maximize=True."""
         mock_llm_client.batch_complete = AsyncMock(
-            return_value=["```python\ndef solve(n): return []\n```"] * 3
+            return_value=[_cr("```python\ndef solve(n): return []\n```")] * 3
         )
         eval_results = [_make_eval_result(10.0), _make_eval_result(50.0), _make_eval_result(30.0)]
 
@@ -81,7 +90,7 @@ class TestRandomSamplerRun:
         """The number of steps in RunResult equals num_samples."""
         n = 4
         mock_llm_client.batch_complete = AsyncMock(
-            return_value=["```python\ndef solve(n): return []\n```"] * n
+            return_value=[_cr("```python\ndef solve(n): return []\n```")] * n
         )
         eval_results = [_make_eval_result(float(i)) for i in range(n)]
 
@@ -98,7 +107,7 @@ class TestRandomSamplerRun:
         """Candidates with no extracted code get score=None and valid=False."""
         # Return plain text with no code block
         mock_llm_client.batch_complete = AsyncMock(
-            return_value=["no code block here"] * 2
+            return_value=[_cr("no code block here")] * 2
         )
 
         sampler = _make_sampler(mock_llm_client, num_samples=2)

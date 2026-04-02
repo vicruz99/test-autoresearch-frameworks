@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from autoresearch_problems import EvalResult, ProblemSpec
 
-from autoresearch_bench.llm.client import LLMClient
+from autoresearch_bench.llm.client import LLMClient, CompletionResult
 from autoresearch_bench.prompts.builder import PromptBuilder
 
 
@@ -76,13 +76,20 @@ def bad_eval_result() -> EvalResult:
 # LLM client fixture
 # ---------------------------------------------------------------------------
 
+def _make_completion_result(content: str) -> CompletionResult:
+    """Helper to create a CompletionResult with default token fields."""
+    return CompletionResult(content=content)
+
+
 @pytest.fixture
 def mock_llm_client() -> MagicMock:
     """A MagicMock standing in for LLMClient with AsyncMock methods."""
     client = MagicMock(spec=LLMClient)
-    client.complete = AsyncMock(return_value="```python\ndef solve(n):\n    return [[0]*n]\n```")
+    client.complete = AsyncMock(
+        return_value=_make_completion_result("```python\ndef solve(n):\n    return [[0]*n]\n```")
+    )
     client.batch_complete = AsyncMock(
-        return_value=["```python\ndef solve(n):\n    return [[0]*n]\n```"]
+        return_value=[_make_completion_result("```python\ndef solve(n):\n    return [[0]*n]\n```")]
     )
     return client
 

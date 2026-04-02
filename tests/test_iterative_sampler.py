@@ -7,9 +7,19 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from autoresearch_problems import EvalResult
 
+from autoresearch_bench.llm.client import CompletionResult
 from autoresearch_bench.prompts.builder import PromptBuilder
 from autoresearch_bench.results import RunResult
 from autoresearch_bench.samplers.iterative_sampler import IterativeSampler
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _cr(content: str) -> CompletionResult:
+    """Shorthand to create a CompletionResult."""
+    return CompletionResult(content=content)
 
 
 # ---------------------------------------------------------------------------
@@ -48,7 +58,7 @@ class TestIterativeSamplerRun:
 
     async def test_returns_run_result(self, sample_spec, mock_llm_client):
         """run() returns a RunResult instance."""
-        code_block = "```python\ndef solve(n): return [[0]*n]\n```"
+        code_block = _cr("```python\ndef solve(n): return [[0]*n]\n```")
         mock_llm_client.batch_complete = AsyncMock(return_value=[code_block, code_block])
         eval_results = [_make_eval_result(10.0), _make_eval_result(20.0)]
 
@@ -63,7 +73,7 @@ class TestIterativeSamplerRun:
 
     async def test_total_steps_is_num_steps_times_samples_per_step(self, sample_spec, mock_llm_client):
         """Total steps = num_steps * samples_per_step."""
-        code_block = "```python\ndef solve(n): return []\n```"
+        code_block = _cr("```python\ndef solve(n): return []\n```")
         num_steps, sps = 3, 2
         mock_llm_client.batch_complete = AsyncMock(return_value=[code_block] * sps)
         eval_per_step = [_make_eval_result(float(i)) for i in range(sps)]
@@ -80,8 +90,8 @@ class TestIterativeSamplerRun:
     async def test_program_updates_when_better_score_found(self, sample_spec, mock_llm_client):
         """current_program is updated when a step yields a higher score."""
         # Step 1: return a better-scoring program
-        better_code = "```python\ndef solve(n): return [[1]*n]\n```"
-        worse_code = "```python\ndef solve(n): return []\n```"
+        better_code = _cr("```python\ndef solve(n): return [[1]*n]\n```")
+        worse_code = _cr("```python\ndef solve(n): return []\n```")
 
         # 2 steps, 1 sample each
         # Step 1 yields score 100 (improvement over initial 5.0)
@@ -120,7 +130,7 @@ class TestIterativeSamplerRun:
 
     async def test_best_score_does_not_decrease(self, sample_spec, mock_llm_client):
         """best_score in the RunResult never decreases between steps."""
-        code_block = "```python\ndef solve(n): return []\n```"
+        code_block = _cr("```python\ndef solve(n): return []\n```")
         # Step 1 yields 100, step 2 yields 10 (should not replace best)
         mock_llm_client.batch_complete = AsyncMock(return_value=[code_block])
         eval_call_count = 0
@@ -155,7 +165,7 @@ class TestIterativeSamplerRun:
 
     async def test_handles_all_none_codes_gracefully(self, sample_spec, mock_llm_client):
         """run() handles steps where all LLM responses contain no code block."""
-        mock_llm_client.batch_complete = AsyncMock(return_value=["no code here", "also no code"])
+        mock_llm_client.batch_complete = AsyncMock(return_value=[_cr("no code here"), _cr("also no code")])
 
         sampler = _make_sampler(mock_llm_client, num_steps=1, samples_per_step=2)
         with (
@@ -170,7 +180,7 @@ class TestIterativeSamplerRun:
 
     async def test_minimize_problem_updates_on_lower_score(self, sample_spec_minimize, mock_llm_client):
         """For minimize problems, best_score decreases over steps."""
-        code_block = "```python\ndef solve(): return 0.1\n```"
+        code_block = _cr("```python\ndef solve(): return 0.1\n```")
         mock_llm_client.batch_complete = AsyncMock(return_value=[code_block])
         eval_call_count = 0
 

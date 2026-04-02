@@ -9,7 +9,7 @@ import httpx
 import openai
 import pytest
 
-from autoresearch_bench.llm.client import LLMClient, _backoff
+from autoresearch_bench.llm.client import LLMClient, CompletionResult, _backoff
 
 
 # ---------------------------------------------------------------------------
@@ -54,12 +54,53 @@ class TestBackoff:
 # Helpers to build mock openai responses
 # ---------------------------------------------------------------------------
 
-def _make_completion_response(content: str) -> MagicMock:
-    """Create a MagicMock that looks like an openai ChatCompletion response."""
+def _make_completion_response(
+    content: str,
+    reasoning_content: str = "",
+    prompt_tokens: int | None = None,
+    completion_tokens: int | None = None,
+    total_tokens: int | None = None,
+    reasoning_tokens: int | None = None,
+    reasoning: str | None = None,
+) -> MagicMock:
+    """Create a MagicMock that looks like an openai ChatCompletion response.
+
+    Parameters
+    ----------
+    reasoning_content:
+        Value for the OpenAI-style ``reasoning_content`` attribute.
+    reasoning:
+        Value for the vLLM-style ``reasoning`` attribute.
+        When set, ``reasoning_content`` is cleared to simulate vLLM behaviour.
+    """
+    mock_message = MagicMock(spec=[
+        "content", "role", "refusal", "annotations", "audio",
+        "function_call", "tool_calls", "reasoning_content", "reasoning",
+    ])
+    mock_message.content = content
+    mock_message.reasoning_content = reasoning_content if reasoning is None else None
+    mock_message.reasoning = reasoning
+
     mock_choice = MagicMock()
-    mock_choice.message.content = content
+    mock_choice.message = mock_message
     mock_response = MagicMock()
     mock_response.choices = [mock_choice]
+
+    if prompt_tokens is not None:
+        mock_usage = MagicMock()
+        mock_usage.prompt_tokens = prompt_tokens
+        mock_usage.completion_tokens = completion_tokens
+        mock_usage.total_tokens = total_tokens
+        if reasoning_tokens is not None:
+            mock_details = MagicMock()
+            mock_details.reasoning_tokens = reasoning_tokens
+            mock_usage.completion_tokens_details = mock_details
+        else:
+            mock_usage.completion_tokens_details = None
+        mock_response.usage = mock_usage
+    else:
+        mock_response.usage = None
+
     return mock_response
 
 
@@ -82,8 +123,8 @@ def _make_rate_limit_error() -> openai.RateLimitError:
 class TestLLMClientComplete:
     """Tests for LLMClient.complete()."""
 
-    async def test_complete_returns_content_string(self):
-        """complete() returns the content string from the LLM response."""
+    async def test_complete_returns_completion_result(self):
+        """complete() returns a CompletionResult with the content from the LLM response."""
         mock_response = _make_completion_response("Hello from LLM")
         with patch("openai.AsyncOpenAI") as MockOpenAI:
             mock_oai = MagicMock()
@@ -92,7 +133,8 @@ class TestLLMClientComplete:
 
             client = LLMClient(base_url="http://localhost:8000/v1", api_key="dummy")
             result = await client.complete("gpt-oss-120b", [{"role": "user", "content": "hi"}])
-            assert result == "Hello from LLM"
+            assert isinstance(result, CompletionResult)
+            assert result.content == "Hello from LLM"
 
     async def test_complete_retries_on_rate_limit(self):
         """complete() retries when a RateLimitError is raised."""
@@ -113,7 +155,7 @@ class TestLLMClientComplete:
                     max_retries=2,
                 )
                 result = await client.complete("gpt-oss-120b", [{"role": "user", "content": "hi"}])
-                assert result == "ok after retry"
+                assert result.content == "ok after retry"
 
     async def test_complete_raises_after_all_retries_exhausted(self):
         """complete() raises RuntimeError when all retry attempts fail."""
@@ -146,7 +188,7 @@ class TestLLMClientComplete:
 
             client = LLMClient(base_url="http://localhost:8000/v1", api_key="dummy")
             result = await client.complete("gpt-oss-120b", [{"role": "user", "content": "hi"}])
-            assert result == ""
+            assert result.content == ""
 
 
 # ---------------------------------------------------------------------------
@@ -175,9 +217,9 @@ class TestLLMClientBatchComplete:
             results = await client.batch_complete("gpt-oss-120b", messages_list)
 
             assert len(results) == 3
-            assert results[0] == "response_0"
-            assert results[1] == "response_1"
-            assert results[2] == "response_2"
+            assert results[0].content == "response_0"
+            assert results[1].content == "response_1"
+            assert results[2].content == "response_2"
 
     async def test_batch_complete_captures_exceptions(self):
         """batch_complete() returns exceptions as values, not raised."""
@@ -246,3 +288,131 @@ async def test_semaphore_limits_concurrency():
     assert len(results) == 3
     # With semaphore=1, max simultaneous calls should be 1
     assert max_concurrent <= 1
+
+
+# ---------------------------------------------------------------------------
+# CompletionResult with reasoning content and token usage tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+class TestCompletionResultFields:
+    """Tests for CompletionResult populated with reasoning_content and token usage."""
+
+    async def test_reasoning_content_captured(self):
+        """complete() captures reasoning_content from the response."""
+        mock_response = _make_completion_response(
+            "final answer",
+            reasoning_content="I think step by step...",
+        )
+        with patch("openai.AsyncOpenAI") as MockOpenAI:
+            mock_oai = MagicMock()
+            mock_oai.chat.completions.create = AsyncMock(return_value=mock_response)
+            MockOpenAI.return_value = mock_oai
+
+            client = LLMClient(base_url="http://localhost:8000/v1", api_key="dummy")
+            result = await client.complete("gpt-oss-120b", [{"role": "user", "content": "hi"}])
+            assert result.reasoning_content == "I think step by step..."
+
+    async def test_token_usage_captured(self):
+        """complete() captures token usage from the response."""
+        mock_response = _make_completion_response(
+            "answer",
+            prompt_tokens=100,
+            completion_tokens=200,
+            total_tokens=300,
+            reasoning_tokens=50,
+        )
+        with patch("openai.AsyncOpenAI") as MockOpenAI:
+            mock_oai = MagicMock()
+            mock_oai.chat.completions.create = AsyncMock(return_value=mock_response)
+            MockOpenAI.return_value = mock_oai
+
+            client = LLMClient(base_url="http://localhost:8000/v1", api_key="dummy")
+            result = await client.complete("gpt-oss-120b", [{"role": "user", "content": "hi"}])
+            assert result.prompt_tokens == 100
+            assert result.completion_tokens == 200
+            assert result.total_tokens == 300
+            assert result.reasoning_tokens == 50
+
+    async def test_no_usage_returns_none_tokens(self):
+        """complete() returns None for token fields when usage is absent."""
+        mock_response = _make_completion_response("answer")
+        with patch("openai.AsyncOpenAI") as MockOpenAI:
+            mock_oai = MagicMock()
+            mock_oai.chat.completions.create = AsyncMock(return_value=mock_response)
+            MockOpenAI.return_value = mock_oai
+
+            client = LLMClient(base_url="http://localhost:8000/v1", api_key="dummy")
+            result = await client.complete("gpt-oss-120b", [{"role": "user", "content": "hi"}])
+            assert result.prompt_tokens is None
+            assert result.reasoning_tokens is None
+
+    async def test_reasoning_effort_passed_via_extra_body(self):
+        """reasoning_effort kwarg is passed via extra_body to the API."""
+        mock_response = _make_completion_response("answer")
+        with patch("openai.AsyncOpenAI") as MockOpenAI:
+            mock_oai = MagicMock()
+            mock_oai.chat.completions.create = AsyncMock(return_value=mock_response)
+            MockOpenAI.return_value = mock_oai
+
+            client = LLMClient(base_url="http://localhost:8000/v1", api_key="dummy")
+            await client.complete(
+                "gpt-oss-120b",
+                [{"role": "user", "content": "hi"}],
+                reasoning_effort="medium",
+            )
+            call_kwargs = mock_oai.chat.completions.create.call_args
+            assert call_kwargs.kwargs["extra_body"] == {"reasoning_effort": "medium"}
+
+    async def test_vllm_reasoning_field_captured(self):
+        """complete() captures vLLM's 'reasoning' field as reasoning_content."""
+        mock_response = _make_completion_response(
+            "final answer",
+            reasoning="Step 1: think... Step 2: answer",
+        )
+        with patch("openai.AsyncOpenAI") as MockOpenAI:
+            mock_oai = MagicMock()
+            mock_oai.chat.completions.create = AsyncMock(return_value=mock_response)
+            MockOpenAI.return_value = mock_oai
+
+            client = LLMClient(base_url="http://localhost:8000/v1", api_key="dummy")
+            result = await client.complete("gpt-oss-120b", [{"role": "user", "content": "hi"}])
+            assert result.reasoning_content == "Step 1: think... Step 2: answer"
+
+    async def test_reasoning_tokens_estimated_when_no_details(self):
+        """reasoning_tokens is estimated from char ratio when completion_tokens_details absent."""
+        # reasoning is 90 chars, content is 10 chars → 90% of 100 tokens = 90
+        reasoning_text = "r" * 90
+        content_text = "c" * 10
+        mock_response = _make_completion_response(
+            content_text,
+            reasoning=reasoning_text,
+            prompt_tokens=50,
+            completion_tokens=100,
+            total_tokens=150,
+        )
+        with patch("openai.AsyncOpenAI") as MockOpenAI:
+            mock_oai = MagicMock()
+            mock_oai.chat.completions.create = AsyncMock(return_value=mock_response)
+            MockOpenAI.return_value = mock_oai
+
+            client = LLMClient(base_url="http://localhost:8000/v1", api_key="dummy")
+            result = await client.complete("gpt-oss-120b", [{"role": "user", "content": "hi"}])
+            assert result.reasoning_tokens == 90  # 90% of 100
+
+    async def test_reasoning_tokens_none_when_no_reasoning_content(self):
+        """reasoning_tokens stays None when there is no reasoning content."""
+        mock_response = _make_completion_response(
+            "just an answer",
+            prompt_tokens=50,
+            completion_tokens=10,
+            total_tokens=60,
+        )
+        with patch("openai.AsyncOpenAI") as MockOpenAI:
+            mock_oai = MagicMock()
+            mock_oai.chat.completions.create = AsyncMock(return_value=mock_response)
+            MockOpenAI.return_value = mock_oai
+
+            client = LLMClient(base_url="http://localhost:8000/v1", api_key="dummy")
+            result = await client.complete("gpt-oss-120b", [{"role": "user", "content": "hi"}])
+            assert result.reasoning_tokens is None

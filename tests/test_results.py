@@ -67,6 +67,8 @@ class TestStepResult:
         expected_keys = {
             "step", "prompt_messages", "raw_response", "generated_code",
             "score", "valid", "error", "execution_time", "metrics",
+            "reasoning_content", "prompt_tokens", "reasoning_tokens",
+            "completion_tokens", "total_tokens",
         }
         assert expected_keys == set(d.keys())
 
@@ -104,7 +106,8 @@ class TestRunResult:
         d = rr.to_dict()
         expected_keys = {
             "sampler_type", "sampler_mode", "model", "problem", "seed",
-            "best_score", "best_code", "initial_score", "config", "timestamp", "steps",
+            "best_score", "best_code", "initial_score", "initial_program",
+            "config", "timestamp", "steps",
         }
         assert expected_keys == set(d.keys())
 
@@ -140,11 +143,14 @@ class TestRunResult:
         assert s["num_steps"] == 1
 
     def test_save_creates_json_file(self, tmp_path):
-        """save() writes a JSON file to the specified directory."""
+        """save() writes result.json inside the run folder."""
         rr = make_run_result()
         path = rr.save(tmp_path)
         assert path.exists()
         assert path.suffix == ".json"
+        assert path.name == "result.json"
+        # JSON is inside the run folder, not at the output_dir root
+        assert path.parent != tmp_path
 
     def test_save_json_content_matches_to_dict(self, tmp_path):
         """The saved JSON content matches to_dict()."""
@@ -163,13 +169,52 @@ class TestRunResult:
         path = rr.save(nested)
         assert path.exists()
 
-    def test_save_filename_contains_key_fields(self, tmp_path):
-        """The filename encodes sampler_type, model, problem, and seed."""
+    def test_save_run_folder_name_contains_key_fields(self, tmp_path):
+        """The run folder name encodes sampler_type, model, problem, and seed."""
         rr = make_run_result(sampler_type="iterative", seed=123)
         path = rr.save(tmp_path)
-        fname = path.name
-        assert "iterative" in fname
-        assert "123" in fname
+        folder_name = path.parent.name
+        assert "iterative" in folder_name
+        assert "123" in folder_name
+
+    def test_save_creates_initial_program_file(self, tmp_path):
+        """save() writes initial_program.py in the run folder."""
+        rr = make_run_result()
+        rr.initial_program = "def solve(): return 1\n"
+        path = rr.save(tmp_path)
+        run_dir = path.parent
+        initial_file = run_dir / "initial_program.py"
+        assert initial_file.exists()
+        assert initial_file.read_text() == "def solve(): return 1\n"
+
+    def test_save_creates_step_program_files(self, tmp_path):
+        """save() writes step_NNN.py files for steps with generated_code."""
+        rr = make_run_result()
+        rr.initial_program = "def solve(): return 0\n"
+        rr.steps[0].generated_code = "def solve(): return 1"
+        path = rr.save(tmp_path)
+        run_dir = path.parent
+        step_file = run_dir / "programs" / "step_000.py"
+        assert step_file.exists()
+        assert step_file.read_text() == "def solve(): return 1"
+
+    def test_save_skips_empty_generated_code(self, tmp_path):
+        """save() does not write step files when generated_code is empty."""
+        rr = make_run_result()
+        rr.steps[0].generated_code = ""
+        path = rr.save(tmp_path)
+        run_dir = path.parent
+        programs_dir = run_dir / "programs"
+        assert programs_dir.exists()
+        assert list(programs_dir.iterdir()) == []
+
+    def test_save_no_initial_program_skips_file(self, tmp_path):
+        """save() does not write initial_program.py when it's empty."""
+        rr = make_run_result()
+        rr.initial_program = ""
+        path = rr.save(tmp_path)
+        run_dir = path.parent
+        assert not (run_dir / "initial_program.py").exists()
 
 
 # ---------------------------------------------------------------------------
